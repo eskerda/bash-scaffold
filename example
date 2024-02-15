@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+
+# Some logging functions I like to having around
+
+function inf  { >&2 printf "\033[34m[+]\033[0m %b\n" "$@" ; }
+function warn { >&2 printf "\033[33m[!]\033[0m %b\n" "$@" ; }
+function err  { >&2 printf "\033[31m[!]\033[0m %b\n" "$@" ; }
+function err! { err "$@" && exit 1; }
+
+# Tool name, useful for not having to mess with naming early on and support
+# consistency with aliases
+
+EXAMPLE=$(basename $0)
+
+# Anything that can be configured on your script should be also configurable
+# through environment variables. Sometimes I use a prefix for outside envs
+# and proxy them to whatever name inside the script
+
+SOMETHING=${EXAMPLE_SOMETHING:-some-default}
+SMTH_ELSE=${EXAMPLE_SMTH_ELSE:-another-default}
+
+# Usage of the script. Single text and no clever tricks here. I have found that
+# having some ascii art representing my script makes me happy.
+
+function usage {
+  cat << EOF
+
+                              .     '     ,
+                                _________
+                             _ /_|_____|_\ _
+                               '. \   / .'
+                                 '.\ /.'
+                                   '.'
+
+                $EXAMPLE: an example single-line description
+
+Usage: $EXAMPLE action [options...]
+
+Options:
+  -s, --something   set something to anything
+  -e, --smth-else   set something else
+  -V, --verbose     echo every command that gets executed
+  -h, --help        display this help
+
+Commands:
+  help                      Show usage
+
+  some-action               Do some action
+
+  another-action <thing>    Another action, takes a thing argument
+
+  yaa <foo> <bar> [...]     Yet another action, takes multiple args
+
+                            Example:
+                              $ $EXAMPLE yaa hello world what is up
+
+  ls <foo>                  Foo action, takes an argument. Extra np args get
+                            passed to whatever it's doing
+
+                            Example:
+                              $ $EXAMPLE ls foobar
+                              $ $EXAMPLE ls foobar -- -al
+
+EOF
+}
+
+
+# Parse arguments. I do not use getopts because I can't remember any tar flags
+# Important to note that unparsed arguments get stored into ARGS and to stop
+# parsing after --  , storing it into _NP_ARGS. Also accept passing arguments
+# as stdin with -
+
+function parse_args {
+  _ARGS=()
+  _NP_ARGS=()
+
+  ! [[ $1 =~ ^- ]] && ACTION=$1 && shift
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -V|--verbose)
+        set -x
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      -s|--something)
+        SOMETHING=$2
+        shift
+        ;;
+      -e|--smth-else)
+        SMTH_ELSE=$2
+        shift
+        ;;
+      -)
+        _ARGS+=("$(cat "$2")")
+        shift
+        ;;
+      --)
+        shift
+        _NP_ARGS+=("$@")
+        break
+        ;;
+      *)
+        _ARGS+=("$1")
+        ;;
+    esac
+    shift
+  done
+}
+
+
+# Maybe some function that does things
+function something-more-complex {
+  local foo=$1
+  local bar=$2
+
+  set -- "${@:3:$#}"
+  inf "Foo: $foo" "Bar: $bar" "Stuff: $*"
+}
+
+
+function main {
+    parse_args "$@"
+
+    # re-set action arguments after parsing. Now we can access action arguments
+    # in their $1, $2, ... order
+    set -- "${_ARGS[@]}"
+
+    warn "SOMETHING=$SOMETHING" "SMTH_ELSE=$SMTH_ELSE"
+
+    case $ACTION in
+        some-action)
+          echo "Hello World"
+          ;;
+        another-action)
+          [[ -z $1 ]] && err! "Please provide a thing"
+          echo "Here is the thing: $1"
+          ;;
+        yaa)
+          something-more-complex "$@"
+          ;;
+        ls)
+          # Some example that uses _NP_ARGS
+          inf "The first argument was: $1"
+          inf "And this is the result of 'ls ${_NP_ARGS[@]}'"
+          ls ${_NP_ARGS[@]}
+          ;;
+        help)
+          usage
+          ;;
+        *)
+          # Display help on unregonized action but err exit code
+          usage
+          exit 1
+          ;;
+    esac
+}
+
+
+main "$@"
